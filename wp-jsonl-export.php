@@ -1,10 +1,10 @@
 <?php
 /**
  * Plugin Name: WP JSONL Export
- * Description: Export any post type to a JSONL file, with the option to include metadata.
- * Version: 1.2
+ * Description: Export any post type to a JSONL file, with the option to include metadata and change key names.
+ * Version: 1.3
  * Author: Rohan Dhananjaya
- * Author URI: https://invismico.com
+ * Author URI: https://github.com/rohandhananjaya
  */
 
 if (!defined('ABSPATH')) exit; // Exit if accessed directly
@@ -59,13 +59,13 @@ class WP_JSONL_Export_Plugin {
                         </td>
                     </tr>
                     <tr>
-                        <th>Include Post Data:</th>
+                        <th>Include Post Data (Edit Keys):</th>
                         <td>
-                            <label><input type="checkbox" name="include_title" checked> Title</label><br>
-                            <label><input type="checkbox" name="include_content" checked> Content</label><br>
-                            <label><input type="checkbox" name="include_excerpt"> Excerpt</label><br>
-                            <label><input type="checkbox" name="include_date"> Date</label><br>
-                            <label><input type="checkbox" name="include_author"> Author</label><br>
+                            <label>Title Key: <input type="text" name="custom_title_key" value="title"></label><br>
+                            <label>Content Key: <input type="text" name="custom_content_key" value="content"></label><br>
+                            <label>Excerpt Key: <input type="text" name="custom_excerpt_key" value="excerpt"></label><br>
+                            <label>Date Key: <input type="text" name="custom_date_key" value="date"></label><br>
+                            <label>Author Key: <input type="text" name="custom_author_key" value="author"></label><br>
                         </td>
                     </tr>
                     <tr>
@@ -76,7 +76,11 @@ class WP_JSONL_Export_Plugin {
                                 <?php foreach ($metadata_fields as $post_type => $meta_keys) : ?>
                                     <div class="meta-fields" data-post-type="<?php echo $post_type; ?>" style="display: none;">
                                         <?php foreach ($meta_keys as $meta_key) : ?>
-                                            <label><input type="checkbox" name="meta_fields[]" value="<?php echo esc_attr($meta_key); ?>"> <?php echo esc_html($meta_key); ?></label><br>
+                                            <label>
+                                                <input type="checkbox" name="meta_fields[]" value="<?php echo esc_attr($meta_key); ?>"> 
+                                                <?php echo esc_html($meta_key); ?> Key: 
+                                                <input type="text" name="custom_meta_keys[<?php echo esc_attr($meta_key); ?>]" value="<?php echo esc_attr($meta_key); ?>">
+                                            </label><br>
                                         <?php endforeach; ?>
                                     </div>
                                 <?php endforeach; ?>
@@ -127,16 +131,19 @@ class WP_JSONL_Export_Plugin {
         );
 
         $posts = get_posts($args);
-        $include_metadata = isset($_POST['include_metadata']);
-        $fields_to_include = array(
-            'title'   => isset($_POST['include_title']),
-            'content' => isset($_POST['include_content']),
-            'excerpt' => isset($_POST['include_excerpt']),
-            'date'    => isset($_POST['include_date']),
-            'author'  => isset($_POST['include_author']),
+
+        // Gather custom field names
+        $custom_keys = array(
+            'title'   => sanitize_text_field($_POST['custom_title_key']),
+            'content' => sanitize_text_field($_POST['custom_content_key']),
+            'excerpt' => sanitize_text_field($_POST['custom_excerpt_key']),
+            'date'    => sanitize_text_field($_POST['custom_date_key']),
+            'author'  => sanitize_text_field($_POST['custom_author_key']),
         );
 
+        $include_metadata = isset($_POST['include_metadata']);
         $selected_meta_fields = isset($_POST['meta_fields']) ? $_POST['meta_fields'] : array();
+        $custom_meta_keys = isset($_POST['custom_meta_keys']) ? $_POST['custom_meta_keys'] : array();
 
         // Generate the JSONL file
         header('Content-Type: application/json');
@@ -145,29 +152,30 @@ class WP_JSONL_Export_Plugin {
         foreach ($posts as $post) {
             $post_data = array();
 
-            // Include selected fields
-            if ($fields_to_include['title']) {
-                $post_data['title'] = $post->post_title;
+            // Include selected fields using custom key names
+            if (!empty($custom_keys['title'])) {
+                $post_data[$custom_keys['title']] = $post->post_title;
             }
-            if ($fields_to_include['content']) {
-                $post_data['content'] = $post->post_content;
+            if (!empty($custom_keys['content'])) {
+                $post_data[$custom_keys['content']] = $post->post_content;
             }
-            if ($fields_to_include['excerpt']) {
-                $post_data['excerpt'] = $post->post_excerpt;
+            if (!empty($custom_keys['excerpt'])) {
+                $post_data[$custom_keys['excerpt']] = $post->post_excerpt;
             }
-            if ($fields_to_include['date']) {
-                $post_data['date'] = $post->post_date;
+            if (!empty($custom_keys['date'])) {
+                $post_data[$custom_keys['date']] = $post->post_date;
             }
-            if ($fields_to_include['author']) {
-                $post_data['author'] = get_the_author_meta('display_name', $post->post_author);
+            if (!empty($custom_keys['author'])) {
+                $post_data[$custom_keys['author']] = get_the_author_meta('display_name', $post->post_author);
             }
 
-            // Include selected metadata fields
+            // Include selected metadata fields using custom key names
             if ($include_metadata) {
                 $metadata = array();
                 foreach ($selected_meta_fields as $meta_key) {
                     $meta_value = get_post_meta($post->ID, $meta_key, true);
-                    $metadata[$meta_key] = $meta_value;
+                    $custom_meta_key = isset($custom_meta_keys[$meta_key]) ? $custom_meta_keys[$meta_key] : $meta_key;
+                    $metadata[$custom_meta_key] = $meta_value;
                 }
                 $post_data['metadata'] = $metadata;
             }
